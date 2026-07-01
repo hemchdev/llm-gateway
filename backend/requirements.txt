@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+litellm==1.91.4
+redis
+prometheus-client
+pydantic
+pydantic-settings
+pytest
+httpx

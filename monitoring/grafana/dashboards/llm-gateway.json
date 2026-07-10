@@ -1,0 +1,60 @@
+{
+  "uid": "llm-gateway",
+  "title": "LLM Gateway",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "RPS by Provider",
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+      "targets": [{"expr": "sum(rate(requests_total[1m])) by (provider)", "legendFormat": "{{provider}}", "refId": "A"}]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Error Rate",
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+      "targets": [{"expr": "sum(rate(errors_total[1m])) by (provider) / clamp_min(sum(rate(requests_total[1m])) by (provider), 0.001)", "legendFormat": "{{provider}}", "refId": "A"}]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "p95 Latency",
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+      "targets": [{"expr": "histogram_quantile(0.95, sum(rate(request_latency_seconds_bucket[5m])) by (le, provider))", "legendFormat": "{{provider}}", "refId": "A"}]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Circuit State Timeline",
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+      "fieldConfig": {"defaults": {"custom": {"drawStyle": "line", "lineInterpolation": "stepAfter"}}},
+      "targets": [{"expr": "circuit_state", "legendFormat": "{{provider}}", "refId": "A"}]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Failover Events",
+      "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+      "targets": [{"expr": "sum(increase(failover_events_total[5m])) by (from_provider, to_provider)", "legendFormat": "{{from_provider}} -> {{to_provider}}", "refId": "A"}]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Queue Depth",
+      "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+      "targets": [{"expr": "queue_depth", "legendFormat": "{{queue}}", "refId": "A"}]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Cost per Hour by Tenant/Feature",
+      "gridPos": {"x": 0, "y": 24, "w": 24, "h": 8},
+      "targets": [{"expr": "sum(rate(cost_usd_total[1h]) * 3600) by (tenant, feature)", "legendFormat": "{{tenant}} / {{feature}}", "refId": "A"}]
+    }
+  ]
+}

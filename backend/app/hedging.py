@@ -24,5 +24,7 @@ async def hedge(primary: Callable[[], Awaitable[T]], fallback: Callable[[], Awai
             task.cancel()
         return await done.pop()
     finally:
+        if not primary_task.done():
+            primary_task.cancel()
         if fallback_task and not fallback_task.done():
             fallback_task.cancel()

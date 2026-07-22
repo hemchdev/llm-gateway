@@ -1,34 +1,90 @@
 services:
   backend:
+    image: localhost/llm-gateway-backend:latest
     build:
       context: ./backend
-    env_file:
-      - .env
+    environment:
+      LLM_GATEWAY_REDIS_URL: redis://redis:6379/0
+      LLM_GATEWAY_ENABLE_DOCS: ${ENABLE_DOCS:-true}
+      LLM_GATEWAY_ENVIRONMENT: ${LLM_GATEWAY_ENVIRONMENT:-dev}
+      LLM_GATEWAY_ALLOWED_ORIGINS: ${LLM_GATEWAY_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8000,http://127.0.0.1:8000}
+      LLM_GATEWAY_ADMIN_API_KEY: ${LLM_GATEWAY_ADMIN_API_KEY:-dev-admin-token}
+      LLM_GATEWAY_METRICS_API_KEY: ${LLM_GATEWAY_METRICS_API_KEY:-dev-metrics-token}
+      LLM_GATEWAY_MAX_REQUEST_BODY_BYTES: ${LLM_GATEWAY_MAX_REQUEST_BODY_BYTES:-1048576}
+      LLM_GATEWAY_UVICORN_WORKERS: ${LLM_GATEWAY_UVICORN_WORKERS:-2}
+      LLM_GATEWAY_PROVIDER_PREFERENCE: openai,anthropic,gemini
+      LLM_GATEWAY_CLASSIFICATION_PROVIDER_PREFERENCE: openai,gemini,anthropic
+      LLM_GATEWAY_LONG_FORM_GENERATION_PROVIDER_PREFERENCE: anthropic,openai,gemini
+      LLM_GATEWAY_OPENAI_API_KEY: ${LLM_GATEWAY_OPENAI_API_KEY:-}
+      LLM_GATEWAY_OPENAI_API_BASE: ${LLM_GATEWAY_OPENAI_API_BASE:-}
+      LLM_GATEWAY_ANTHROPIC_API_KEY: ${LLM_GATEWAY_ANTHROPIC_API_KEY:-}
+      LLM_GATEWAY_GEMINI_API_KEY: ${LLM_GATEWAY_GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_API_BASE: ${OPENAI_API_BASE:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      LLM_GATEWAY_CIRCUIT_MIN_SAMPLES: "3"
+      LLM_GATEWAY_CIRCUIT_ERROR_RATE_THRESHOLD: "0.5"
+      LLM_GATEWAY_CIRCUIT_P95_LATENCY_THRESHOLD_SECONDS: "0.5"
+      LLM_GATEWAY_CIRCUIT_RESET_SECONDS: "20"
+      LLM_GATEWAY_QUEUE_WORKER_ENABLED: "true"
     ports:
       - "8000:8000"
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
 
   redis:
-    image: redis:7-alpine
+    image: docker.io/library/redis:7-alpine
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   prometheus:
-    image: prom/prometheus:latest
+    image: docker.io/prom/prometheus:latest
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "9090:9090"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
 
   grafana:
-    image: grafana/grafana:latest
+    image: docker.io/grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
     volumes:
-      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
       - "3000:3000"
     depends_on:
-      - prometheus
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12

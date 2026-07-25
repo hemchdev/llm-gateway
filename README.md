@@ -10,9 +10,6 @@ A self healing, OpenAI compatible gateway for routing chat completions across mu
 ![Podman](https://img.shields.io/badge/Podman-892CA0?logo=podman&logoColor=white)
 ![Tests: pytest](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)
 
-Once this is pushed to GitHub, swap in a real CI badge, for example
-`![CI](https://github.com/<owner>/<repo>/actions/workflows/ci.yml/badge.svg)`.
-Left out here since no workflow is wired up yet.
 
 ## Demo
 

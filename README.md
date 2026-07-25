@@ -1,4 +1,4 @@
-# LLM Gateway
+# Self-Healing LLM Gateway
 
 A self healing, OpenAI compatible gateway for routing chat completions across multiple LLM providers, with health aware failover, hedged requests, deferrable retries, and full observability.
 

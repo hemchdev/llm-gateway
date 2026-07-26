@@ -22,12 +22,21 @@ class FakeCircuitState:
     value: str
 
 
+@dataclass
+class FakeCircuitDecision:
+    state: FakeCircuitState
+
+
 class FakeBreaker:
-    def __init__(self, state: str = "closed") -> None:
+    def __init__(self, state: str = "closed", states: dict[str, str] | None = None) -> None:
         self.state = state
+        self.states = states or {}
 
     def state_for(self, provider: str) -> FakeCircuitState:
-        return FakeCircuitState(self.state)
+        return FakeCircuitState(self.states.get(provider, self.state))
+
+    async def allow_provider(self, provider: str, tenant: str, feature: str) -> FakeCircuitDecision:
+        return FakeCircuitDecision(FakeCircuitState(self.states.get(provider, self.state)))
 
 
 def _settings(**overrides) -> Settings:
@@ -94,8 +103,46 @@ def test_admin_chaos_requires_bearer_token() -> None:
         json={"provider": "openai", "duration_seconds": 10, "rate": 1.0, "error_type": "server_error"},
     )
 
-    assert response.status_code == 401
-    assert response.json()["error"]["code"] == "unauthorized"
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "forbidden"
+
+
+def test_provider_status_requires_gateway_headers() -> None:
+    response = _client().get("/v1/providers")
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "missing_required_headers"
+
+
+def test_provider_status_includes_current_breaker_state() -> None:
+    app = create_app(
+        _settings(
+            provider_preference="openai,anthropic",
+            classification_provider_preference="openai,anthropic",
+            long_form_generation_provider_preference="anthropic",
+            openai_api_key="test-openai-key",
+            anthropic_api_key="test-anthropic-key",
+        )
+    )
+    app.state.queue_redis = FakeRedis()
+    app.state.provider_breaker = FakeBreaker(states={"openai": "closed", "anthropic": "open"})
+    client = TestClient(app)
+
+    response = client.get(
+        "/v1/providers",
+        headers={
+            "X-Tenant-Id": "tenant-a",
+            "X-Feature": "classification",
+            "X-Request-Id": "req-providers",
+        },
+    )
+
+    assert response.status_code == 200
+    providers = {provider["name"]: provider for provider in response.json()["providers"]}
+    assert providers["openai"]["circuit_state"] == "closed"
+    assert providers["openai"]["has_api_key"] is True
+    assert providers["anthropic"]["circuit_state"] == "open"
+    assert providers["anthropic"]["has_api_key"] is True
 
 
 def test_ready_reflects_redis_connectivity() -> None:
@@ -134,6 +181,8 @@ def test_production_startup_validation_fails_for_missing_required_secrets() -> N
                 classification_provider_preference="openai",
                 long_form_generation_provider_preference="openai",
                 require_provider_api_keys=True,
+                admin_api_key=None,
+                metrics_api_key=None,
                 openai_api_key="",
             )
         )

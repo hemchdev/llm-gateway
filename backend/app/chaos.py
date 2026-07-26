@@ -126,20 +126,9 @@ router = APIRouter(prefix="/admin")
                 }
             },
         },
-        401: {
-            "model": ErrorResponse,
-            "description": "Missing admin authentication.",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "error": {"code": "unauthorized", "message": "Unauthorized", "request_id": "unknown"}
-                    }
-                }
-            },
-        },
         403: {
             "model": ErrorResponse,
-            "description": "Invalid admin authentication.",
+            "description": "Missing or invalid X-Admin-Key authentication.",
             "content": {
                 "application/json": {
                     "example": {

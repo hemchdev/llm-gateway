@@ -32,9 +32,23 @@ def require_token(request: Request, expected_token: str | None, realm: str) -> N
         raise HTTPException(status_code=403, detail="Forbidden")
 
 
+def require_header_token(request: Request, header_name: str, expected_token: str | None, realm: str) -> None:
+    if not expected_token:
+        raise HTTPException(status_code=503, detail=f"{realm} authentication is not configured")
+
+    supplied_token = request.headers.get(header_name)
+    if not supplied_token or not hmac.compare_digest(supplied_token, expected_token):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
 async def require_admin_auth(request: Request) -> None:
     settings: Settings = getattr(request.app.state, "settings", get_settings())
     require_token(request, settings.admin_token(), "admin")
+
+
+async def require_chaos_admin_auth(request: Request) -> None:
+    settings: Settings = getattr(request.app.state, "settings", get_settings())
+    require_header_token(request, "x-admin-key", settings.admin_token(), "admin")
 
 
 async def require_metrics_auth(request: Request) -> None:

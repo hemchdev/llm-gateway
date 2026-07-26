@@ -2,6 +2,7 @@ import os
 from functools import lru_cache
 from typing import Literal
 
+from dotenv import dotenv_values
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -14,6 +15,16 @@ def _enable_docs_default() -> bool:
     if value is None:
         return True
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _encryption_key_default() -> str | None:
+    value = os.getenv("ENCRYPTION_KEY")
+    if value is None:
+        dotenv_value = dotenv_values(".env").get("ENCRYPTION_KEY")
+        value = str(dotenv_value) if dotenv_value is not None else None
+    if value is None:
+        return None
+    return value.strip() or None
 
 
 class Settings(BaseSettings):
@@ -29,6 +40,8 @@ class Settings(BaseSettings):
     admin_api_key: SecretStr | None = None
     metrics_api_key: SecretStr | None = None
     enable_docs: bool = Field(default_factory=_enable_docs_default)
+    encryption_key: str | None = Field(default_factory=_encryption_key_default)
+    runtime_provider_key_prefix: str = "llm_gateway:runtime_providers"
     uvicorn_workers: int = Field(default=2, ge=1)
     default_model: str = "gpt-4o-mini"
     provider_preference: str = "openai,anthropic,gemini"

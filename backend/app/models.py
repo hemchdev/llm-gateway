@@ -150,3 +150,104 @@ class ReadyResponse(BaseModel):
             }
         }
     )
+
+
+class ProviderStatus(BaseModel):
+    name: str
+    circuit_state: str
+    model: str | None = None
+    configured: bool = True
+    has_api_key: bool = False
+    api_base: str | None = None
+    request_classes: list[str] | None = None
+    priority: int | None = None
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "name": "openai",
+                "circuit_state": "closed",
+                "model": "gpt-4o-mini",
+                "configured": True,
+                "has_api_key": True,
+                "api_base": "https://api.openai.com/v1",
+                "request_classes": ["classification", "long_form_generation"],
+                "priority": 1,
+            }
+        }
+    )
+
+
+class ProvidersResponse(BaseModel):
+    providers: list[ProviderStatus]
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "providers": [
+                    {
+                        "name": "openai",
+                        "circuit_state": "closed",
+                        "model": "gpt-4o-mini",
+                        "configured": True,
+                        "has_api_key": True,
+                    },
+                    {
+                        "name": "anthropic",
+                        "circuit_state": "open",
+                        "model": "anthropic/claude-3-5-haiku-latest",
+                        "configured": True,
+                        "has_api_key": True,
+                    },
+                ]
+            }
+        }
+    )
+
+
+class RuntimeProviderRequest(BaseModel):
+    name: str
+    model: str
+    api_key: str | None = None
+    api_base: str | None = None
+    request_classes: list[str] = Field(default_factory=lambda: ["classification"])
+    priority: int = 100
+    enabled: bool = True
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "name": "my-openai-compatible-api",
+                "model": "openai/my-model",
+                "api_key": "sk-your-key",
+                "api_base": "https://inference.example.com/v1",
+                "request_classes": ["classification"],
+                "priority": 1,
+                "enabled": True,
+            }
+        }
+    )
+
+
+class RuntimeProviderPatch(BaseModel):
+    model: str | None = None
+    api_key: str | None = None
+    api_base: str | None = None
+    request_classes: list[str] | None = None
+    priority: int | None = None
+    enabled: bool | None = None
+
+
+class RuntimeProviderResponse(BaseModel):
+    name: str
+    model: str | None = None
+    api_key: str | None = None
+    has_api_key: bool = False
+    api_base: str | None = None
+    request_classes: list[str] | None = None
+    priority: int | None = None
+    enabled: bool = True
+
+
+class RuntimeProvidersResponse(BaseModel):
+    providers: list[RuntimeProviderResponse]

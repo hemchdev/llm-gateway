@@ -1,262 +1,473 @@
 # LLM Gateway
 
-A self healing, OpenAI compatible gateway for routing chat completions across multiple LLM providers, with health aware failover, hedged requests, deferrable retries, and full observability.
+A production-style, OpenAI-compatible LLM gateway for routing chat completion requests across multiple providers with Redis-backed health tracking, circuit breaking, failover, semantic caching, deferred retries, tenant controls, and full Prometheus/Grafana observability.
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
 ![Redis](https://img.shields.io/badge/Redis-DC382D?logo=redis&logoColor=white)
 ![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?logo=prometheus&logoColor=white)
 ![Grafana](https://img.shields.io/badge/Grafana-F46800?logo=grafana&logoColor=white)
-![Podman](https://img.shields.io/badge/Podman-892CA0?logo=podman&logoColor=white)
-![Tests: pytest](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)
 
-Once this is pushed to GitHub, swap in a real CI badge, for example
-`![CI](https://github.com/<owner>/<repo>/actions/workflows/ci.yml/badge.svg)`.
-Left out here since no workflow is wired up yet.
+## Demo Recording
 
-## Demo
+Add the 60-90 second GitHub demo recording here:
 
-90 second screen recording placeholder:
-Healthy traffic, then a provider degrading, the breaker tripping, traffic rerouting, and the breaker closing on recovery.
+```md
+https://github.com/user-attachments/assets/your-recording-link
+```
 
-## Table of Contents
+Recommended recording flow:
 
-1. [Overview](#overview)
-2. [Features](#features)
-3. [Architecture](#architecture)
-4. [Getting Started](#getting-started)
-5. [Run Locally](#run-locally)
-6. [Run With Podman](#run-with-podman)
-7. [API Docs](#api-docs)
-8. [Chaos Demo](#chaos-demo)
-9. [Configuration](#configuration)
-10. [Tests](#tests)
-11. [Contributing](#contributing)
-12. [License](#license)
+1. Show the frontend console at `http://localhost:3001`.
+2. Show a saved provider in Redis.
+3. Send a successful chat request.
+4. Open Grafana and show healthy traffic.
+5. Inject chaos into a provider.
+6. Send traffic again and show the breaker opening or traffic rerouting.
+7. Return to Grafana and show the error spike, circuit state, and failover panels.
 
-## Overview
+## What This Project Shows
 
-LLM Gateway is a FastAPI service that exposes an OpenAI compatible `POST /v1/chat/completions` endpoint while routing requests across multiple LLM providers through LiteLLM (https://github.com/BerriAI/litellm). It tracks per provider health, trips circuit breakers on degradation, hedges latency sensitive requests, queues deferrable work for retry, and injects chaos on demand, all backed by a Podman friendly Prometheus and Grafana observability stack.
+LLM Gateway is designed as a demo of reliability patterns around LLM APIs:
 
-## Features
-
-1. OpenAI compatible API: a drop in `/v1/chat/completions` endpoint. Existing OpenAI SDK clients work with just a `base_url` change.
-2. Multi provider routing: normalized across providers via LiteLLM, selected per request class.
-3. Health tracking: Redis sliding window success rate, p50, p95, and p99 latency, and an error taxonomy per provider.
-4. Circuit breaking: closed, open, and half open states with automatic recovery probing.
-5. Hedged requests: backup requests fired after a configurable delay for latency sensitive classes.
-6. Deferrable retry queue: Redis backed backoff and jitter with idempotency keys for degraded provider scenarios.
-7. Chaos injection: an admin endpoint to simulate provider failure on demand for live failover demos.
-8. Semantic cache: SHA 256 hashed, normalized prompt cache hits in Redis.
-9. Model tiering and budgets: cheap model routing for easy requests, plus per tenant rate limits and monthly budgets.
-10. PII redaction: requests and queued payloads are redacted before being logged or written.
-11. Full observability: Prometheus metrics plus a provisioned Grafana dashboard out of the box.
+- OpenAI-compatible `/v1/chat/completions` endpoint.
+- Custom OpenAI-compatible provider registration from the frontend.
+- Redis-backed provider storage with encrypted API keys.
+- Provider health tracking with sliding windows.
+- Circuit breaker states: `closed`, `open`, and `half_open`.
+- Automatic provider failover.
+- Hedged requests for latency-sensitive workloads.
+- Redis-backed retry queue for deferrable requests.
+- Semantic response cache.
+- Per-tenant rate limits and monthly budgets.
+- Structured request logging with PII redaction.
+- Prometheus metrics and Grafana dashboard.
+- Chaos endpoint for demoing failures.
 
 ## Architecture
 
-1. `backend/app/main.py`: mounts the API, health check, metrics endpoint, and admin chaos route.
-2. `backend/app/providers.py`: selects providers by request class, applies chaos, records metrics, handles failover, queues deferrable work.
-3. `backend/app/health.py`: stores provider outcomes in Redis sorted sets, keyed by timestamp, for sliding window health summaries.
-4. `backend/app/circuit_breaker.py`: tracks per provider closed, open, and half open state from HealthTracker error rate and p95 latency thresholds.
-5. `backend/app/hedging.py`: fires backup requests for latency sensitive classes after a configurable delay.
-6. `backend/app/queue.py`: Redis backed deferrable retries with exponential backoff, jitter, and idempotency keys derived from `X-Request-Id`.
-
-Prometheus scrapes `/metrics`. Grafana provisions the LLM Gateway dashboard automatically.
-
-## Getting Started
-
-### Run Locally
-
-```powershell
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-python -m pip install -r backend\requirements.txt
-python -m pytest backend\tests
-uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000 --workers 2
-```
-
-Every chat request must include:
-
 ```text
-X-Tenant-Id: tenant-a
-X-Feature: classification
-X-Request-Id: req-123
+Frontend Console
+  |
+  | /api/gateway/* proxy
+  v
+FastAPI Backend
+  |
+  | LiteLLM
+  v
+OpenAI-compatible Providers
+
+FastAPI Backend
+  |
+  +--> Redis: providers, health windows, cache, queue, tenant limits
+  +--> Prometheus: /metrics scrape
+  +--> Grafana: provisioned dashboard
 ```
 
-### Run With Podman
+Important files:
 
-Start the Podman VM if needed:
+- `frontend/`: Next.js console for provider setup, chat, chaos, and monitoring links.
+- `backend/app/main.py`: FastAPI app, chat endpoint, provider admin API, health, readiness, metrics.
+- `backend/app/providers.py`: LiteLLM routing, provider calls, failover, queue handoff.
+- `backend/app/runtime_config.py`: Redis-backed provider store with Fernet-encrypted API keys.
+- `backend/app/health.py`: Redis sliding-window health tracker.
+- `backend/app/circuit_breaker.py`: provider circuit breaker.
+- `backend/app/queue.py`: Redis retry queue with idempotency keys.
+- `backend/app/chaos.py`: synthetic error/latency injection.
+- `monitoring/`: Prometheus and Grafana provisioning.
 
-```powershell
-podman machine start
-```
+## Quick Start
 
-Bring up the full stack:
-
-```powershell
-podman compose up --build -d
-```
-
-If your Podman install delegates Compose to the Docker Compose shim, this equivalent command also works:
+From the project root:
 
 ```powershell
 docker-compose up --build -d
 ```
 
-Services once running:
-
-1. API at `http://localhost:8000`
-2. Swagger UI at `http://localhost:8000/docs`
-3. ReDoc at `http://localhost:8000/redoc`
-4. Prometheus at `http://localhost:9090`
-5. Grafana at `http://localhost:3000`
-6. Grafana dashboard at `http://localhost:3000/d/llm-gateway/llm-gateway`
-
-Check health:
+Check containers:
 
 ```powershell
-podman ps
-curl.exe http://localhost:8000/health
-curl.exe http://localhost:8000/ready
-curl.exe http://localhost:9090/-/healthy
-curl.exe http://localhost:3000/api/health
+docker-compose ps
 ```
 
-### API Docs
-
-Docs are enabled with `ENABLE_DOCS=true` and protected by the admin token. In local compose the default token is `dev-admin-token`, so either use Basic auth in a browser:
+You should see:
 
 ```text
-http://admin:dev-admin-token@localhost:8000/docs
+backend
+frontend
+redis
+prometheus
+grafana
 ```
 
-or fetch them with a header:
+Open:
 
-```powershell
-curl.exe -H "Authorization: Bearer dev-admin-token" http://localhost:8000/docs
-curl.exe -H "Authorization: Bearer dev-admin-token" http://localhost:8000/openapi.json
+| Service | URL |
+| --- | --- |
+| Frontend console | `http://localhost:3001` |
+| Backend API | `http://localhost:8000` |
+| API docs | `http://localhost:8000/docs` |
+| Grafana | `http://localhost:3000` |
+| Prometheus | `http://localhost:9090` |
+
+Grafana default login:
+
+```text
+admin / admin
 ```
 
-Disable docs in public deployments with:
+## Using The Frontend Console
 
-```powershell
-$env:ENABLE_DOCS = "false"
-podman compose up --build -d
+Open:
+
+```text
+http://localhost:3001
 ```
 
-## Chaos Demo
+Enter the admin key:
 
-The Compose stack calls real providers through LiteLLM. Put at least one real provider key in `.env` before sending chat traffic:
-
-```dotenv
-LLM_GATEWAY_OPENAI_API_KEY=sk-...
-# or
-LLM_GATEWAY_ANTHROPIC_API_KEY=sk-ant-...
-# or
-LLM_GATEWAY_GEMINI_API_KEY=...
+```text
+dev-admin-token
 ```
 
-1. Send healthy traffic:
+If you changed `.env`, use your value for:
+
+```text
+LLM_GATEWAY_ADMIN_API_KEY
+```
+
+### Add A Custom OpenAI-Compatible API
+
+For a provider such as Logfare, OpenRouter, a local inference server, or any API that supports OpenAI-style chat completions:
+
+```text
+Provider name: logfare-free
+Model: openai/deepseek-v4-flash
+API base URL: https://logfare.ai/v1
+API key: your-api-key
+Request classes: classification
+Priority: 1
+Enabled: checked
+```
+
+Then click:
+
+```text
+Save provider
+```
+
+The API key is encrypted before being stored in Redis. The frontend only displays a masked key.
+
+### Send A Chat Request
+
+Use:
+
+```text
+Tenant: demo-tenant
+Feature: classification
+Request class: classification
+Model: deepseek-v4-flash
+Message: Hello, explain FastAPI in one sentence.
+```
+
+Click:
+
+```text
+Send chat
+```
+
+The request goes through the gateway, not directly from the browser to the provider.
+
+## Personal Inference Servers
+
+If your OpenAI-compatible server runs on the internet:
+
+```text
+API base URL: https://your-server.com/v1
+Model: openai/your-model
+```
+
+If your server runs on your own computer and the backend runs in Docker, do not use `localhost` for the provider URL. Inside Docker, `localhost` means the backend container.
+
+Use:
+
+```text
+http://host.docker.internal:PORT/v1
+```
+
+Example:
+
+```text
+API base URL: http://host.docker.internal:11434/v1
+Model: openai/your-local-model
+API key: local
+```
+
+## API Usage
+
+Every chat request must include:
+
+```text
+X-Tenant-Id
+X-Feature
+X-Request-Id
+```
+
+Example:
 
 ```powershell
 $body = @'
-{"model":"gpt-4o-mini","messages":[{"role":"user","content":"classify this"}],"metadata":{"request_class":"classification"}}
+{
+  "model": "deepseek-v4-flash",
+  "messages": [
+    {"role": "user", "content": "Say hello in one sentence."}
+  ],
+  "metadata": {
+    "request_class": "classification"
+  }
+}
 '@
 
 curl.exe -X POST http://localhost:8000/v1/chat/completions `
   -H "Content-Type: application/json" `
-  -H "X-Tenant-Id: tenant-demo" `
+  -H "X-Tenant-Id: demo-tenant" `
   -H "X-Feature: classification" `
-  -H "X-Request-Id: healthy-1" `
+  -H "X-Request-Id: demo-1" `
   -d $body
 ```
 
-2. Degrade the primary provider:
+## Admin APIs
+
+Admin endpoints require:
+
+```text
+X-Admin-Key: dev-admin-token
+```
+
+List saved providers:
+
+```powershell
+curl.exe http://localhost:8000/admin/providers `
+  -H "X-Admin-Key: dev-admin-token"
+```
+
+Create a provider:
+
+```powershell
+$provider = @'
+{
+  "name": "logfare-free",
+  "model": "openai/deepseek-v4-flash",
+  "api_base": "https://logfare.ai/v1",
+  "api_key": "your-api-key",
+  "request_classes": ["classification"],
+  "priority": 1,
+  "enabled": true
+}
+'@
+
+curl.exe -X POST http://localhost:8000/admin/providers `
+  -H "Content-Type: application/json" `
+  -H "X-Admin-Key: dev-admin-token" `
+  -d $provider
+```
+
+Inject chaos:
 
 ```powershell
 $chaos = @'
-{"provider":"openai","duration_seconds":120,"rate":1.0,"error_type":"server_error","latency_ms":25}
+{
+  "provider": "logfare-free",
+  "duration_seconds": 60,
+  "rate": 1.0,
+  "error_type": "server_error",
+  "latency_ms": 0
+}
 '@
 
 curl.exe -X POST http://localhost:8000/admin/chaos `
-  -H "Authorization: Bearer dev-admin-token" `
   -H "Content-Type: application/json" `
+  -H "X-Admin-Key: dev-admin-token" `
   -d $chaos
 ```
 
-3. Send several more classification requests. The first few should fail against `openai`. Once the sliding health window trips the breaker, traffic reroutes to the next configured provider that has a key.
+## Recording The GitHub Demo
 
-4. Watch it happen in Prometheus or Grafana:
+Use this simple script while recording:
 
 ```text
-errors_total{provider="openai",error_type="server_error"}
-circuit_state{provider="openai"}
-failover_events_total{from_provider="openai"}
+This is my LLM Gateway.
+It lets me save OpenAI-compatible providers with an API URL and key.
+The key is encrypted in Redis.
+Now I send a chat request through the gateway.
+Prometheus collects metrics, and Grafana shows traffic, errors, latency, circuit state, queue depth, and cost.
+Now I inject chaos into a provider.
+The gateway records failures and opens the circuit breaker.
+The dashboard shows the error spike and provider state change.
+```
+
+Suggested recording steps:
+
+1. Start the stack with `docker-compose up --build -d`.
+2. Open `http://localhost:3001`.
+3. Refresh the provider list.
+4. Save or show a custom provider.
+5. Send a successful chat request.
+6. Open `http://localhost:3000/d/llm-gateway/llm-gateway`.
+7. Click `Chaos` for the provider in the frontend.
+8. Send chat again.
+9. Show Grafana panels updating.
+10. Stop recording and add the video link under **Demo Recording**.
+
+## Observability
+
+Prometheus scrapes:
+
+```text
+http://backend:8000/metrics
+```
+
+Grafana dashboard panels:
+
+- RPS by provider
+- Error rate
+- p95 latency
+- Circuit state timeline
+- Failover events
+- Queue depth
+- Cost per hour by tenant/feature
+
+Useful Prometheus queries:
+
+```promql
 sum(rate(requests_total[1m])) by (provider)
+sum(rate(errors_total[1m])) by (provider)
 histogram_quantile(0.95, sum(rate(request_latency_seconds_bucket[5m])) by (le, provider))
+circuit_state
+failover_events_total
 queue_depth
 sum(rate(cost_usd_total[1h]) * 3600) by (tenant, feature)
 ```
 
-After the chaos duration and circuit reset period pass, half open probes are allowed back to the recovering provider. A successful probe closes the breaker.
-
 ## Configuration
 
-Use `.env` for real settings. It is gitignored. See `.env.example` for provider keys, request class routing, circuit breaker thresholds, hedging, queue retry, semantic cache, tenant limits, budgets, and cost estimation settings.
+Copy `.env.example` to `.env` and fill real secrets locally. Never commit `.env`.
 
-For a personal inference server that exposes an OpenAI compatible `/v1/chat/completions` API, route it through the OpenAI provider slot:
+Important settings:
 
 ```dotenv
-LLM_GATEWAY_PROVIDER_PREFERENCE=openai
-LLM_GATEWAY_CLASSIFICATION_PROVIDER_PREFERENCE=openai
-LLM_GATEWAY_LONG_FORM_GENERATION_PROVIDER_PREFERENCE=openai
-LLM_GATEWAY_OPENAI_API_KEY=your-local-or-server-key
-LLM_GATEWAY_OPENAI_API_BASE=http://localhost:11434/v1
-LLM_GATEWAY_OPENAI_MODEL=your-model-name
-LLM_GATEWAY_DEFAULT_MODEL=your-model-name
-LLM_GATEWAY_CHEAP_MODEL=your-smaller-model-name
+LLM_GATEWAY_ADMIN_API_KEY=dev-admin-token
+LLM_GATEWAY_METRICS_API_KEY=dev-metrics-token
+ENCRYPTION_KEY=generate-a-fernet-key
+LLM_GATEWAY_REDIS_URL=redis://redis:6379/0
+LLM_GATEWAY_CIRCUIT_P95_LATENCY_THRESHOLD_SECONDS=15
 ```
 
-If your server does not require a real key, use the placeholder value it expects, such as `LLM_GATEWAY_OPENAI_API_KEY=local`.
+Generate a Fernet key:
 
-Default request classes:
+```powershell
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
 
-1. `classification`: interactive and latency sensitive.
-2. `long_form_generation`: deferrable.
+Do not commit API keys. If a key is accidentally pasted into chat, logs, or GitHub, rotate it.
 
-Resilience and cost controls:
+## Troubleshooting
 
-1. Semantic cache stores successful responses in Redis using a SHA 256 hash of the normalized, redacted prompt.
-2. Model tiering sends requests classified as easy to `LLM_GATEWAY_CHEAP_MODEL`.
-3. Tenant rate limits are enforced per tenant and feature over a Redis TTL window.
-4. Monthly budgets are enforced per tenant and feature using estimated prompt plus completion token cost.
-5. Request logs and queued payloads are redacted before they are written.
+### `503 Service Unavailable`
+
+Usually means no provider is currently usable.
+
+Check:
+
+1. Provider is saved.
+2. Provider is enabled.
+3. Request class matches the provider request class.
+4. API base URL ends with `/v1`.
+5. API key is correct.
+6. Circuit breaker is not open.
+
+Open the frontend and click:
+
+```text
+Refresh
+```
+
+Then look at `Routing status`.
+
+### Saved Providers Disappear
+
+Do not run:
+
+```powershell
+docker-compose down -v
+```
+
+The `-v` flag deletes Docker volumes, including Redis data.
+
+Normal restart is safe:
+
+```powershell
+docker-compose restart
+```
+
+### Local API Does Not Work
+
+If your provider runs on your laptop, use:
+
+```text
+http://host.docker.internal:PORT/v1
+```
+
+Do not use:
+
+```text
+http://localhost:PORT/v1
+```
+
+from inside Docker.
+
+### Admin Calls Return `403`
+
+Use the correct admin key:
+
+```text
+X-Admin-Key: dev-admin-token
+```
+
+or the value from `.env`.
 
 ## Tests
+
+Run:
 
 ```powershell
 .\venv\Scripts\Activate.ps1
 python -m pytest backend\tests
 ```
 
-Pytest cache is pinned to `.tmp/pytest-cache`.
+The test suite covers:
 
-Current coverage includes:
+- Health tracker sliding-window math.
+- Circuit breaker state cycles.
+- Deferrable retry queue and idempotency.
+- Semantic cache.
+- Tenant rate limits and budgets.
+- PII redaction.
+- Runtime provider encryption and routing.
+- Production hardening behavior.
 
-1. Circuit breaker closed, open, half open, closed cycles.
-2. p95 latency and error rate trips.
-3. Half open probe throttling and failed probe reopening.
-4. Redis sliding window health math and taxonomy.
-5. Idempotent queue enqueue, retry backoff and jitter, completed item dedupe, and max attempt failure.
-6. Semantic cache prompt normalization and cache hits.
-7. Model tiering for easy requests.
-8. Tenant rate limits and monthly budget enforcement.
-9. PII redaction before request logging and queue writes.
+Pytest cache is stored in:
 
-## Contributing
+```text
+.tmp/pytest-cache
+```
 
-This started as a solo learning and portfolio project, but issues and pull requests are welcome if you spot a bug or want to extend it. Please open an issue describing the change before submitting a large pull request.
+## Notes For Reviewers
+
+This project is intended as a portfolio/demo implementation of LLM gateway reliability patterns. It is not a managed production service. Before real production use, add CI/CD, secret management, persistent storage backups, stricter auth, rate-limit tuning, and deployment-specific hardening.
 
 ## License
 
-Licensed under the MIT License. Add a `LICENSE` file with the MIT text if one is not in the repo yet, or replace this section with whichever license you prefer.
+MIT License. See `LICENSE`.

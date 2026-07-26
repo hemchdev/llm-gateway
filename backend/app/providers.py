@@ -24,6 +24,7 @@ from .models import (
     ChatRequest,
 )
 from .queue import enqueue_deferrable_request
+from .runtime_config import ProviderStore
 from .tiering import tiered_model
 
 logger = logging.getLogger("llm_gateway.providers")
@@ -78,14 +79,40 @@ def _available_routes(settings: Settings, request: ChatRequest, request_class: s
     return candidates
 
 
+async def _runtime_available_routes(
+    settings: Settings,
+    request: ChatRequest,
+    request_class: str,
+    queue_redis: Any | None,
+) -> list[ProviderRoute]:
+    if queue_redis is None or not ProviderStore.is_configured(settings) or not hasattr(queue_redis, "smembers"):
+        return []
+    selected_model = tiered_model(request, request_class, settings)
+    store = ProviderStore.from_settings(queue_redis, settings)
+    providers = await store.ordered_for_class(request_class)
+    return [
+        ProviderRoute(
+            name=str(provider["name"]),
+            model=str(provider.get("model") or selected_model),
+            api_key=provider.get("api_key"),
+            api_base=provider.get("api_base"),
+        )
+        for provider in providers
+        if provider.get("api_key")
+    ]
+
+
 async def _allowed_routes(
     settings: Settings,
     request: ChatRequest,
     request_class: str,
     tenant: str,
     breaker: ProviderCircuitBreaker,
+    queue_redis: Any | None = None,
 ) -> list[ProviderRoute]:
-    candidates = _available_routes(settings, request, request_class)
+    candidates = await _runtime_available_routes(settings, request, request_class, queue_redis)
+    if not candidates:
+        candidates = _available_routes(settings, request, request_class)
     allowed: list[ProviderRoute] = []
     for route in candidates:
         decision = await breaker.allow_provider(route.name, tenant, request_class)
@@ -317,6 +344,7 @@ async def complete_chat(
         request_class=request_class,
         tenant=tenant,
         breaker=breaker,
+        queue_redis=queue_redis,
     )
     if not routes:
         if (

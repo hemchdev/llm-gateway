@@ -5,9 +5,10 @@ services:
       context: ./backend
     environment:
       LLM_GATEWAY_REDIS_URL: redis://redis:6379/0
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
       LLM_GATEWAY_ENABLE_DOCS: ${ENABLE_DOCS:-true}
       LLM_GATEWAY_ENVIRONMENT: ${LLM_GATEWAY_ENVIRONMENT:-dev}
-      LLM_GATEWAY_ALLOWED_ORIGINS: ${LLM_GATEWAY_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8000,http://127.0.0.1:8000}
+      LLM_GATEWAY_ALLOWED_ORIGINS: ${LLM_GATEWAY_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001,http://localhost:8000,http://127.0.0.1:8000}
       LLM_GATEWAY_ADMIN_API_KEY: ${LLM_GATEWAY_ADMIN_API_KEY:-dev-admin-token}
       LLM_GATEWAY_METRICS_API_KEY: ${LLM_GATEWAY_METRICS_API_KEY:-dev-metrics-token}
       LLM_GATEWAY_MAX_REQUEST_BODY_BYTES: ${LLM_GATEWAY_MAX_REQUEST_BODY_BYTES:-1048576}
@@ -26,7 +27,7 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       LLM_GATEWAY_CIRCUIT_MIN_SAMPLES: "3"
       LLM_GATEWAY_CIRCUIT_ERROR_RATE_THRESHOLD: "0.5"
-      LLM_GATEWAY_CIRCUIT_P95_LATENCY_THRESHOLD_SECONDS: "0.5"
+      LLM_GATEWAY_CIRCUIT_P95_LATENCY_THRESHOLD_SECONDS: "15"
       LLM_GATEWAY_CIRCUIT_RESET_SECONDS: "20"
       LLM_GATEWAY_QUEUE_WORKER_ENABLED: "true"
     ports:
@@ -44,6 +45,8 @@ services:
     image: docker.io/library/redis:7-alpine
     ports:
       - "6379:6379"
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -57,6 +60,7 @@ services:
       - "--storage.tsdb.path=/prometheus"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/secrets/metrics_token:/run/secrets/llm_gateway_metrics_token:ro
     ports:
       - "9090:9090"
     depends_on:
@@ -88,3 +92,29 @@ services:
       interval: 5s
       timeout: 3s
       retries: 12
+
+  frontend:
+    image: localhost/llm-gateway-frontend:latest
+    build:
+      context: ./frontend
+    environment:
+      GATEWAY_INTERNAL_URL: http://backend:8000
+      NEXT_PUBLIC_GATEWAY_URL: http://backend:8000
+      NEXT_PUBLIC_GRAFANA_URL: http://localhost:3000/d/llm-gateway/llm-gateway
+      NEXT_PUBLIC_PROMETHEUS_URL: http://localhost:9090
+      NEXT_PUBLIC_DOCS_URL: http://localhost:8000/docs
+    ports:
+      - "3001:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+      grafana:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+volumes:
+  redis-data:

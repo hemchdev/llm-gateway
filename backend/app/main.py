@@ -5,7 +5,7 @@ import asyncio
 import json
 import logging
 
-from fastapi import Body, Depends, FastAPI, Request
+from fastapi import Body, Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
@@ -20,13 +20,26 @@ from .health import HealthTracker, router as health_router
 from .limits import TenantLimiter, enforce_tenant_limits
 from .logging_utils import configure_logging, log_request_received, reset_log_context, set_log_context
 from .metrics import metrics_payload, record_request_metrics
-from .models import ChatCompletionResponse, ChatRequest, ErrorResponse, QueuedResponse
+from .models import (
+    ChatCompletionResponse,
+    ChatRequest,
+    ErrorResponse,
+    ProviderStatus,
+    ProvidersResponse,
+    QueuedResponse,
+    RuntimeProviderPatch,
+    RuntimeProviderRequest,
+    RuntimeProviderResponse,
+    RuntimeProvidersResponse,
+)
 from .providers import DeferredRequestQueued, complete_chat
 from .queue import DeferredRequest, DeferredRequestWorker, get_redis
-from .security import require_admin_auth, require_metrics_auth
+from .runtime_config import ProviderStore
+from .security import require_admin_auth, require_chaos_admin_auth, require_metrics_auth
 
 REQUIRED_HEADERS = ("x-tenant-id", "x-feature", "x-request-id")
 HEADER_EXEMPT_PATHS = ("/health", "/ready", "/metrics", "/admin/chaos", "/docs", "/redoc", "/openapi.json")
+HEADER_EXEMPT_PREFIXES = ("/admin/providers",)
 API_TITLE = "LLM Gateway API"
 API_VERSION = "1.0.0"
 API_DESCRIPTION = (
@@ -146,6 +159,10 @@ def _error_response_doc(status_code: int, description: str, code: str, message: 
     }
 
 
+def _is_header_exempt(path: str) -> bool:
+    return path in HEADER_EXEMPT_PATHS or any(path.startswith(prefix) for prefix in HEADER_EXEMPT_PREFIXES)
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     settings.validate_startup()
@@ -223,7 +240,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.chaos_controller = chaos_controller
 
     app.include_router(health_router)
-    app.include_router(chaos_router, dependencies=[Depends(require_admin_auth)])
+    app.include_router(chaos_router, dependencies=[Depends(require_chaos_admin_auth)])
 
     async def authenticated_metrics(_: None = Depends(require_metrics_auth)) -> str:
         return metrics_payload()
@@ -340,7 +357,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     request_id=_request_id(request),
                 )
 
-            if request.url.path in HEADER_EXEMPT_PATHS:
+            if _is_header_exempt(request.url.path):
                 return await call_next(request)
 
             missing_headers = [header for header in REQUIRED_HEADERS if not request.headers.get(header)]
@@ -474,6 +491,159 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "queue": queued.queue_name,
                 },
             )
+
+    def runtime_provider_store() -> ProviderStore:
+        runtime_settings: Settings = app.state.settings
+        queue_redis = app.state.queue_redis
+        if not ProviderStore.is_configured(runtime_settings):
+            raise HTTPException(status_code=503, detail="Runtime provider storage is not configured")
+        return ProviderStore.from_settings(queue_redis, runtime_settings)
+
+    @app.get(
+        "/admin/providers",
+        response_model=RuntimeProvidersResponse,
+        tags=["admin"],
+        summary="List runtime providers",
+        description="Lists custom OpenAI-compatible providers stored in Redis. API keys are masked in responses.",
+        dependencies=[Depends(require_chaos_admin_auth)],
+        responses={
+            200: {"description": "Runtime providers stored in Redis."},
+            403: _error_response_doc(403, "Missing or invalid X-Admin-Key.", "forbidden", "Forbidden"),
+            503: _error_response_doc(503, "Runtime provider storage is not configured.", "service_unavailable", "Service temporarily unavailable"),
+        },
+    )
+    async def list_runtime_providers() -> RuntimeProvidersResponse:
+        store = runtime_provider_store()
+        providers = [RuntimeProviderResponse.model_validate(provider) for provider in await store.list()]
+        return RuntimeProvidersResponse(providers=providers)
+
+    @app.post(
+        "/admin/providers",
+        response_model=RuntimeProviderResponse,
+        tags=["admin"],
+        summary="Create runtime provider",
+        description=(
+            "Creates or replaces a custom provider in Redis. Use an OpenAI-compatible model name such as "
+            "openai/my-model and an api_base ending in /v1 for personal inference endpoints."
+        ),
+        dependencies=[Depends(require_chaos_admin_auth)],
+        responses={
+            200: {"description": "Provider saved with the API key encrypted at rest."},
+            403: _error_response_doc(403, "Missing or invalid X-Admin-Key.", "forbidden", "Forbidden"),
+            503: _error_response_doc(503, "Runtime provider storage is not configured.", "service_unavailable", "Service temporarily unavailable"),
+        },
+    )
+    async def create_runtime_provider(provider: RuntimeProviderRequest) -> RuntimeProviderResponse:
+        store = runtime_provider_store()
+        saved = await store.create(provider.model_dump(exclude_none=True))
+        return RuntimeProviderResponse.model_validate(saved)
+
+    @app.put(
+        "/admin/providers/{provider_name}",
+        response_model=RuntimeProviderResponse,
+        tags=["admin"],
+        summary="Update runtime provider",
+        description="Updates a custom Redis-backed provider. Omit api_key to keep the existing encrypted key.",
+        dependencies=[Depends(require_chaos_admin_auth)],
+        responses={
+            200: {"description": "Provider updated."},
+            403: _error_response_doc(403, "Missing or invalid X-Admin-Key.", "forbidden", "Forbidden"),
+            404: _error_response_doc(404, "Provider was not found.", "not_found", "Provider not found"),
+            503: _error_response_doc(503, "Runtime provider storage is not configured.", "service_unavailable", "Service temporarily unavailable"),
+        },
+    )
+    async def update_runtime_provider(provider_name: str, patch: RuntimeProviderPatch) -> RuntimeProviderResponse:
+        store = runtime_provider_store()
+        updates = patch.model_dump(exclude_unset=True, exclude_none=True)
+        updated = await store.update(provider_name, updates)
+        if updated is None:
+            raise HTTPException(status_code=404, detail="Provider not found")
+        return RuntimeProviderResponse.model_validate(updated)
+
+    @app.delete(
+        "/admin/providers/{provider_name}",
+        response_model=dict[str, bool],
+        tags=["admin"],
+        summary="Delete runtime provider",
+        description="Deletes a custom Redis-backed provider.",
+        dependencies=[Depends(require_chaos_admin_auth)],
+        responses={
+            200: {"description": "Provider deletion result."},
+            403: _error_response_doc(403, "Missing or invalid X-Admin-Key.", "forbidden", "Forbidden"),
+            503: _error_response_doc(503, "Runtime provider storage is not configured.", "service_unavailable", "Service temporarily unavailable"),
+        },
+    )
+    async def delete_runtime_provider(provider_name: str) -> dict[str, bool]:
+        store = runtime_provider_store()
+        return {"deleted": await store.delete(provider_name)}
+
+    @app.get(
+        "/v1/providers",
+        response_model=ProvidersResponse,
+        tags=["chat"],
+        summary="List provider status",
+        description=(
+            "Lists configured providers and their current circuit breaker state. "
+            "Runtime providers stored in Redis are included when provider storage is configured."
+        ),
+        responses={
+            200: {
+                "description": "Configured providers with current circuit breaker state.",
+                "content": {
+                    "application/json": {
+                        "example": ProvidersResponse.model_config["json_schema_extra"]["example"]
+                    }
+                },
+            },
+            400: _error_response_doc(
+                400,
+                "Required metadata headers are missing.",
+                "missing_required_headers",
+                "Missing required headers: x-tenant-id, x-feature, x-request-id",
+            ),
+        },
+    )
+    async def list_providers(http_request: Request) -> ProvidersResponse:
+        runtime_settings: Settings = http_request.app.state.settings
+        breaker: ProviderCircuitBreaker = http_request.app.state.provider_breaker
+        provider_statuses: dict[str, ProviderStatus] = {}
+        tenant = http_request.headers["x-tenant-id"]
+        feature = http_request.headers["x-feature"]
+
+        configured_models = {
+            "openai": runtime_settings.openai_model,
+            "anthropic": runtime_settings.anthropic_model,
+            "gemini": runtime_settings.gemini_model,
+        }
+        for provider in runtime_settings.configured_provider_names:
+            decision = await breaker.allow_provider(provider, tenant, feature)
+            provider_statuses[provider] = ProviderStatus(
+                name=provider,
+                circuit_state=decision.state.value,
+                model=configured_models.get(provider),
+                configured=True,
+                has_api_key=bool(runtime_settings.provider_api_key(provider)),
+                api_base=runtime_settings.provider_api_base(provider),
+            )
+
+        queue_redis = http_request.app.state.queue_redis
+        if ProviderStore.is_configured(runtime_settings) and hasattr(queue_redis, "smembers"):
+            store = ProviderStore.from_settings(queue_redis, runtime_settings)
+            for provider in await store.list():
+                provider_name = str(provider["name"])
+                decision = await breaker.allow_provider(provider_name, tenant, feature)
+                provider_statuses[provider_name] = ProviderStatus(
+                    name=provider_name,
+                    circuit_state=decision.state.value,
+                    model=provider.get("model"),
+                    configured=bool(provider.get("enabled", True)),
+                    has_api_key=bool(provider.get("has_api_key")),
+                    api_base=provider.get("api_base"),
+                    request_classes=provider.get("request_classes"),
+                    priority=provider.get("priority"),
+                )
+
+        return ProvidersResponse(providers=list(provider_statuses.values()))
 
     return app
 

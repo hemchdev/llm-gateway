@@ -1,4 +1,4 @@
-# LLM Gateway
+# Self-Healing LLM Gateway
 
 A production-style, OpenAI-compatible LLM gateway for routing chat completion requests across multiple providers with Redis-backed health tracking, circuit breaking, failover, semantic caching, deferred retries, tenant controls, and full Prometheus/Grafana observability.
 
@@ -10,7 +10,10 @@ A production-style, OpenAI-compatible LLM gateway for routing chat completion re
 ![Next.js](https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white)
 ![Tests](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)
 
+<<<<<<< HEAD
 ## Demo Recording
+=======
+>>>>>>> 0688f1b1bc70992661f59ccbebbcf9cc1fea48b5
 
 Add the 60-90 second GitHub demo recording here:
 
@@ -470,4 +473,8 @@ This project is intended as a portfolio/demo implementation of LLM gateway relia
 
 ## License
 
+<<<<<<< HEAD
 MIT License. See `LICENSE`.
+=======
+Licensed under the MIT License. Add a `LICENSE` file with the MIT text if one is not in the repo yet, or replace this section with whichever license you prefer.
+>>>>>>> 0688f1b1bc70992661f59ccbebbcf9cc1fea48b5

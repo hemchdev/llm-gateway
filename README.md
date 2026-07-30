@@ -41,11 +41,11 @@
   </tr>
   <tr>
     <td width="50%">
-      <img src="docs/screenshots/grafana_dashboard.png" alt="Grafana dashboard">
+      <img src="docs/screenshots/chaos_breaker.png" alt="Chaos demo">
       <p align="center"><strong>Grafana dashboard</strong></p>
     </td>
     <td width="50%">
-      <img src="docs/screenshots/chaos_breaker.png" alt="Chaos demo">
+      <img src="docs/screenshots/grafana_dashboard.png" alt="Grafana dashboard">
       <p align="center"><strong>Chaos demo</strong></p>
     </td>
   </tr>

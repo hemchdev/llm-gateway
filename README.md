@@ -104,30 +104,6 @@ The project also includes a Next.js console for saving providers, sending chat r
   <img src="docs/screenshots/architecture.png" alt="LLM Gateway architecture" width="900">
 </p>
 
-```text
-Browser console
-  |
-  v
-Next.js API proxy
-  |
-  v
-FastAPI gateway
-  |
-  v
-LiteLLM provider calls
-  |
-  v
-OpenAI compatible inference APIs
-
-FastAPI gateway
-  |
-  v
-Redis for providers, cache, health windows, queue, and tenant limits
-
-Prometheus scrapes gateway metrics
-Grafana reads Prometheus dashboards
-```
-
 ## Project Layout
 
 <table>

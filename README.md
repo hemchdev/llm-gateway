@@ -5,7 +5,13 @@
 </p>
 
 <p align="center">
-  FastAPI | LiteLLM | Redis | Prometheus | Grafana | Next.js | Pytest
+  <kbd>FastAPI</kbd>
+  <kbd>LiteLLM</kbd>
+  <kbd>Redis</kbd>
+  <kbd>Prometheus</kbd>
+  <kbd>Grafana</kbd>
+  <kbd>Next.js</kbd>
+  <kbd>Pytest</kbd>
 </p>
 
 <p align="center">

@@ -10,23 +10,16 @@ A production-style, OpenAI-compatible LLM gateway for routing chat completion re
 ![Next.js](https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white)
 ![Tests](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)
 
-## Demo Recording
+## Screenshots
 
-Add the 60-90 second GitHub demo recording here:
+Add project screenshots here before publishing the repository:
 
-```md
-https://github.com/user-attachments/assets/your-recording-link
-```
-
-Recommended recording flow:
-
-1. Show the frontend console at `http://localhost:3001`.
-2. Show a saved provider in Redis.
-3. Send a successful chat request.
-4. Open Grafana and show healthy traffic.
-5. Inject chaos into a provider.
-6. Send traffic again and show the breaker opening or traffic rerouting.
-7. Return to Grafana and show the error spike, circuit state, and failover panels.
+| Screen | What To Show | Suggested File |
+| --- | --- | --- |
+| Frontend console | Saved provider, chat panel, routing status, and monitoring links | `docs/screenshots/frontend-console.png` |
+| Successful chat | A real OpenAI-compatible provider response through the gateway | `docs/screenshots/chat-success.png` |
+| Grafana dashboard | RPS, error rate, p95 latency, circuit state, queue depth, and cost panels | `docs/screenshots/grafana-dashboard.png` |
+| Chaos demo | Provider degradation, breaker state change, and traffic rerouting | `docs/screenshots/chaos-breaker.png` |
 
 ## What This Project Shows
 
@@ -293,22 +286,20 @@ curl.exe -X POST http://localhost:8000/admin/chaos `
   -d $chaos
 ```
 
-## Recording The GitHub Demo
+## Screenshot Walkthrough
 
-Use this simple script while recording:
+Use this simple checklist when preparing images for GitHub:
 
 ```text
-This is my LLM Gateway.
-It lets me save OpenAI-compatible providers with an API URL and key.
-The key is encrypted in Redis.
-Now I send a chat request through the gateway.
-Prometheus collects metrics, and Grafana shows traffic, errors, latency, circuit state, queue depth, and cost.
-Now I inject chaos into a provider.
-The gateway records failures and opens the circuit breaker.
-The dashboard shows the error spike and provider state change.
+Show the frontend console with one saved provider.
+Show a successful chat response through the gateway.
+Show Grafana while traffic is healthy.
+Inject chaos into one provider.
+Show the breaker opening and traffic rerouting.
+Show the dashboard after recovery.
 ```
 
-Suggested recording steps:
+Suggested screenshot steps:
 
 1. Start the stack with `docker-compose up --build -d`.
 2. Open `http://localhost:3001`.
@@ -319,7 +310,7 @@ Suggested recording steps:
 7. Click `Chaos` for the provider in the frontend.
 8. Send chat again.
 9. Show Grafana panels updating.
-10. Stop recording and add the video link under **Demo Recording**.
+10. Add the final images under **Screenshots**.
 
 ## Observability
 

@@ -234,21 +234,75 @@ export default function GatewayConsole() {
     }
   }
 
+  const savedProviderCount = runtimeProviders.length;
+  const closedProviderCount = providerStatus.filter((item) => item.circuit_state === "closed").length;
+  const openProviderCount = providerStatus.filter((item) => item.circuit_state === "open").length;
+  const halfOpenProviderCount = providerStatus.filter((item) => item.circuit_state === "half_open").length;
+  const activeRoute = providerStatus.find((item) => item.circuit_state !== "open")?.name || "No active route";
+  const lastResponse = chatResult?.choices?.[0]?.message?.content || "Send a request to see the routed response here.";
+
   return (
     <main className="shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">LLM Gateway</p>
-          <h1>Chat and provider console</h1>
+      <header className="hero">
+        <div className="heroCopy">
+          <div className="brandLine">
+            <span className="brandMark">LG</span>
+            <span>LLM Gateway Console</span>
+          </div>
+          <p className="eyebrow">Self-healing LLM routing</p>
+          <h1>Operate OpenAI-compatible providers from one clean console.</h1>
+          <p className="lede">
+            Save encrypted provider credentials, send chat traffic, inject failures, and jump straight into the monitoring stack when a route changes.
+          </p>
+          <nav className="links" aria-label="Monitoring links">
+            <a href={grafanaUrl}>Grafana</a>
+            <a href={prometheusUrl}>Prometheus</a>
+            <a href={docsUrl}>API Docs</a>
+          </nav>
         </div>
-        <nav className="links" aria-label="Monitoring links">
-          <a href={grafanaUrl}>Grafana</a>
-          <a href={prometheusUrl}>Prometheus</a>
-          <a href={docsUrl}>API Docs</a>
-        </nav>
+        <aside className="heroPanel" aria-label="Gateway snapshot">
+          <div className="routeStrip">
+            <span>Current route</span>
+            <strong>{activeRoute}</strong>
+          </div>
+          <div className="miniConsole">
+            <div>
+              <span>Tenant</span>
+              <strong>{tenantId || "Not set"}</strong>
+            </div>
+            <div>
+              <span>Feature</span>
+              <strong>{feature || "Not set"}</strong>
+            </div>
+            <div>
+              <span>Class</span>
+              <strong>{requestClass || "Not set"}</strong>
+            </div>
+          </div>
+          <p>{lastResponse}</p>
+        </aside>
       </header>
 
-      <section className="controls">
+      <section className="statGrid" aria-label="Gateway summary">
+        <div className="statCard">
+          <span>Saved providers</span>
+          <strong>{savedProviderCount}</strong>
+        </div>
+        <div className="statCard">
+          <span>Closed circuits</span>
+          <strong>{closedProviderCount}</strong>
+        </div>
+        <div className="statCard">
+          <span>Half open</span>
+          <strong>{halfOpenProviderCount}</strong>
+        </div>
+        <div className="statCard warn">
+          <span>Open circuits</span>
+          <strong>{openProviderCount}</strong>
+        </div>
+      </section>
+
+      <section className="controls commandBar">
         <label>
           Admin key
           <input value={adminKey} onChange={(event) => setAdminKey(event.target.value)} type="password" placeholder="X-Admin-Key" />

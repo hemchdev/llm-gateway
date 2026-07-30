@@ -1,17 +1,25 @@
-<h1 align="center">LLM Gateway</h1>
+<h1 align="center">Self-Healing LLM Gateway</h1>
 
 <p align="center">
-  A production grade gateway for OpenAI compatible chat APIs with provider routing, circuit breaking, Redis persistence, semantic caching, tenant controls, chaos testing, and full observability.
+  <strong>A production-grade AI gateway for OpenAI-compatible APIs with intelligent provider failover, automatic recovery, circuit breaking, semantic caching, tenant-aware rate limiting, and enterprise observability.</strong>
 </p>
 
 <p align="center">
-  <kbd>FastAPI</kbd>
-  <kbd>LiteLLM</kbd>
-  <kbd>Redis</kbd>
-  <kbd>Prometheus</kbd>
-  <kbd>Grafana</kbd>
-  <kbd>Next.js</kbd>
-  <kbd>Pytest</kbd>
+  <img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" />
+  <img src="https://img.shields.io/badge/LiteLLM-6C63FF?style=for-the-badge&logo=openai&logoColor=white" />
+  <img src="https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white" />
+  <img src="https://img.shields.io/badge/Prometheus-E6522C?style=for-the-badge&logo=prometheus&logoColor=white" />
+  <img src="https://img.shields.io/badge/Grafana-F46800?style=for-the-badge&logo=grafana&logoColor=white" />
+  <img src="https://img.shields.io/badge/Next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white" />
+  <img src="https://img.shields.io/badge/Pytest-0A9EDC?style=for-the-badge&logo=pytest&logoColor=white" />
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Self--Healing-Automatic%20Recovery-22C55E?style=flat-square" />
+  <img src="https://img.shields.io/badge/Circuit%20Breaker-Enabled-orange?style=flat-square" />
+  <img src="https://img.shields.io/badge/OpenAI-Compatible-412991?style=flat-square&logo=openai&logoColor=white" />
+  <img src="https://img.shields.io/badge/Production-Ready-success?style=flat-square" />
+  <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" />
 </p>
 
 <p align="center">

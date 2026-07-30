@@ -12,11 +12,9 @@ A production-style, OpenAI-compatible LLM gateway for routing chat completion re
 
 ## Screenshots
 
-Add project screenshots here before publishing the repository:
-
 | Screen | What To Show | Suggested File |
 | --- | --- | --- |
-| Frontend console | Saved provider, chat panel, routing status, and monitoring links | `docs/screenshots/frontend-console.png` |
+| Frontend console | Saved provider, chat panel, routing status, and monitoring links | docs/screenshots/frontend-console.png |
 | Successful chat | A real OpenAI-compatible provider response through the gateway | `docs/screenshots/chat-success.png` |
 | Grafana dashboard | RPS, error rate, p95 latency, circuit state, queue depth, and cost panels | `docs/screenshots/grafana-dashboard.png` |
 | Chaos demo | Provider degradation, breaker state change, and traffic rerouting | `docs/screenshots/chaos-breaker.png` |
